@@ -1,0 +1,22 @@
+{
+  "name": "obsidian-ebbinghaus-roam",
+  "version": "1.5.2",
+  "description": "Ebbinghaus roaming review for Obsidian: schedule whole notes in selected folders along a forgetting curve.",
+  "main": "main.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "verify": "node verify.js",
+    "test": "node test-scheduler.js && node test-plugin.js",
+    "build": "node build.js"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "spaced-repetition",
+    "ebbinghaus",
+    "review"
+  ],
+  "author": "GCMG",
+  "license": "MIT"
+}
