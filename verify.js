@@ -120,10 +120,19 @@ code.includes('Platform.isMobile')
   ? ok('通过 vault.adapter 写入库内数据文件')
   : fail('缺少 adapter.write(DATA_FILE)');
 
+section('Obsidian DOM 调用');
+{
+  // createDiv/createSpan 的第二个参数是回调，不是配置对象，传对象会在运行时抛错
+  const misuse = [...code.matchAll(/\bcreate(?:Div|Span)\(\s*(['"])[^'"]*\1\s*,\s*\{/g)];
+  if (!misuse.length) ok('createDiv/createSpan 未把配置对象当回调');
+  else fail('createDiv/createSpan 第二参数必须是回调', misuse.map((m) => m[0]).join('\n'));
+}
+
 section('测试');
 for (const [name, file] of [
   ['调度逻辑', 'test-scheduler.js'],
   ['插件集成', 'test-plugin.js'],
+  ['视图渲染', 'test-view.js'],
 ]) {
   const r = spawnSync(process.execPath, [file], { cwd: ROOT, encoding: 'utf8' });
   if (r.status === 0) {

@@ -8,6 +8,7 @@
 
 const assert = require('assert');
 const Module = require('module');
+const { createEl } = require('./test-dom.js');
 
 global.window = global;
 
@@ -41,13 +42,7 @@ class TFolder extends TAbstractFile {
 }
 
 function makeEl() {
-  return {
-    classList: { toggle() {}, add() {}, remove() {} },
-    addClass() {},
-    addEventListener() {},
-    textContent: '',
-    title: '',
-  };
+  return createEl('div');
 }
 
 class Notice {
@@ -77,7 +72,10 @@ class Plugin {
     this._data = JSON.parse(JSON.stringify(d));
     saveCalls.count++;
   }
-  registerView() {}
+  registerView(type, factory) {
+    this._views = this._views || {};
+    this._views[type] = factory;
+  }
   addRibbonIcon(icon, title, cb) {
     const el = makeEl();
     this._ribbon.push({ icon, title, cb, el });
@@ -312,6 +310,11 @@ async function asyncTest(name, fn) {
     assert.ok(plugin._commands.length >= 7, '命令数量不足');
     assert.ok(plugin._settingTabs.length === 1);
     assert.ok(plugin._ribbon.length === 1);
+    assert.strictEqual(
+      typeof plugin._views['ebbinghaus-roam-view'],
+      'function',
+      '应注册视图工厂'
+    );
   });
 
   await asyncTest('onLayoutReady 后首次铺开只纳入范围内笔记', async () => {
@@ -735,6 +738,36 @@ async function asyncTest(name, fn) {
     } finally {
       workspace.getRightLeaf = originalRight;
       workspace.getLeaf = originalGetLeaf;
+    }
+  });
+
+  await asyncTest('activateView 会重建占位视图而不新建叶片', async () => {
+    const calls = [];
+    let leafView = { getViewType: () => 'ebbinghaus-roam-view' }; // 无 renderSafe
+    const leaf = {
+      app,
+      get view() {
+        return leafView;
+      },
+      setViewState: async (state) => {
+        calls.push(state.type);
+        if (state.type === 'ebbinghaus-roam-view') {
+          leafView = { renderSafe() {}, getViewType: () => 'ebbinghaus-roam-view' };
+        }
+      },
+    };
+    const originalLeaves = workspace.getLeavesOfType;
+    const originalRight = workspace.getRightLeaf;
+    workspace.getLeavesOfType = (type) => (type === 'ebbinghaus-roam-view' ? [leaf] : []);
+    workspace.getRightLeaf = () => {
+      throw new Error('不应新建叶片');
+    };
+    try {
+      await plugin.activateView();
+      assert.deepStrictEqual(calls, ['empty', 'ebbinghaus-roam-view']);
+    } finally {
+      workspace.getLeavesOfType = originalLeaves;
+      workspace.getRightLeaf = originalRight;
     }
   });
 

@@ -1,5 +1,17 @@
 # 更新日志
 
+## 1.6.2
+
+- 修复右侧栏面板整块空白的根因：5 处 `createDiv('类名', { text })` 把配置对象放在了
+  Obsidian 的回调参数位，运行时抛 `TypeError: callback is not a function`，渲染中断。
+  已统一改为 `createDiv({ cls, text })`。
+- 修复启动时由 `workspace.json` 恢复出的「未知视图」占位实例导致面板持续空白：
+  `onLayoutReady` 与 `activateView` 会识别并原地重建该叶片。
+- 新增 `test-dom.js`：忠实复刻 Obsidian 的 `createEl/createDiv/createSpan` 语义（第二参数是回调）。
+- 新增 `test-view.js`：真正实例化 `RoamView`，覆盖到期列表、即将到期、暂停提示、错误 UI 与重试。
+- `verify.js` 增加静态扫描，禁止再把配置对象写进 `createDiv/createSpan` 的回调位；
+  VSCode 新增 `test:view`、`test:all` 任务与 `test-view.js` 调试配置。
+
 ## 1.6.1
 
 - 修复右侧边栏面板可能出现整块空白的问题：

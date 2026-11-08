@@ -9,6 +9,15 @@
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "调试 test-view.js",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/test-view.js",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

@@ -24,6 +24,21 @@
       "problemMatcher": []
     },
     {
+      "label": "test:view",
+      "type": "shell",
+      "command": "node test-view.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "test:all",
+      "type": "shell",
+      "command": "npm test",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
       "label": "package:android",
       "type": "shell",
       "command": "node build.js",

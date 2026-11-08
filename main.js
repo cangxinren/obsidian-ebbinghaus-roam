@@ -302,6 +302,8 @@ class EbbinghausRoamPlugin extends Plugin {
     this._lastSavedRaw = null;
     this._mergingRemote = false;
     this._dataMtime = 0;
+    // 防止占位视图重建时重入
+    this._healingLeaves = new WeakSet();
 
     await this.loadStore();
 
@@ -384,6 +386,12 @@ class EbbinghausRoamPlugin extends Plugin {
       // 只有首次运行（还没有任何记录）才按修改时间铺开；
       // 之后启动时发现的新笔记按普通规则从 1 天后开始。
       this.enrollScope(Object.keys(this.data.notes).length === 0);
+
+      // 布局恢复出的“未知视图”占位实例：重建成本插件视图
+      this.healPlaceholderLeaves().catch((e) => {
+        console.error('[ebbinghaus-roam] 修复占位视图失败', e);
+      });
+
       this.refreshUI();
 
       // 布局恢复出来的空白视图：重新渲染一次，失败时会把错误显示在面板里
@@ -1042,9 +1050,57 @@ class EbbinghausRoamPlugin extends Plugin {
 
   /* ---------------- 视图与状态栏 ---------------- */
 
+  /**
+   * Obsidian 启动时可能按 workspace.json 提前恢复出「未知视图」占位实例：
+   * 它带有正确的 getViewType，但没有 render/renderSafe，导致面板一直空白。
+   * 这里先切到 empty 再切回本视图类型，强制用注册工厂重建。
+   */
+  async rebuildLeafView(leaf, activate = false) {
+    if (!leaf || typeof leaf.setViewState !== 'function') return false;
+    if (this._healingLeaves && this._healingLeaves.has(leaf)) return false;
+    if (this._healingLeaves) this._healingLeaves.add(leaf);
+    try {
+      // 直接 setViewState({ type: VIEW_TYPE }) 可能因“类型未变”被跳过
+      await leaf.setViewState({ type: 'empty', active: false });
+      await leaf.setViewState({ type: VIEW_TYPE, active: !!activate });
+      const view = leaf.view;
+      if (view && typeof view.renderSafe === 'function') {
+        view.renderSafe();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('[ebbinghaus-roam] 重建复习面板失败', e);
+      return false;
+    } finally {
+      if (this._healingLeaves) this._healingLeaves.delete(leaf);
+    }
+  }
+
+  /** 启动时修复占位视图；不进定时器，避免反复重建 */
+  async healPlaceholderLeaves() {
+    if (!this.app || !this.app.workspace) return;
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE).slice();
+    for (const leaf of leaves) {
+      const view = leaf && leaf.view;
+      if (!view) continue;
+      if (typeof view.renderSafe === 'function' || typeof view.render === 'function') continue;
+      await this.rebuildLeafView(leaf, false);
+    }
+  }
+
   async activateView() {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
+
+    // 启动恢复出的占位视图：原地重建，避免面板一直空白
+    if (leaf && leaf.view && typeof leaf.view.renderSafe !== 'function') {
+      const healed = await this.rebuildLeafView(leaf, true);
+      if (!healed) {
+        if (typeof leaf.detach === 'function') leaf.detach();
+        leaf = null;
+      }
+    }
 
     if (!leaf) {
       if (Platform.isMobile) {
@@ -1380,14 +1436,14 @@ class RoamView extends ItemView {
     const enrolled = scope.filter((f) => plugin.data.notes[f.path]).length;
 
     const header = root.createDiv('er-header');
-    header.createDiv('er-title', { text: '漫游复习' });
+    header.createDiv({ cls: 'er-title', text: '漫游复习' });
     const stats = header.createDiv('er-stats');
     stats.createSpan({ cls: 'er-stat', text: `到期 ${due.length}` });
     stats.createSpan({ cls: 'er-stat', text: `范围内 ${scope.length}` });
     stats.createSpan({ cls: 'er-stat', text: `已纳入 ${enrolled}` });
 
     if (s.paused) {
-      root.createDiv('er-paused', { text: '⏸ 自动记录已暂停，仍可手动评分' });
+      root.createDiv({ cls: 'er-paused', text: '⏸ 自动记录已暂停，仍可手动评分' });
     }
 
     const actions = root.createDiv('er-actions');
@@ -1416,13 +1472,14 @@ class RoamView extends ItemView {
     if (due.length) listHead.createSpan({ cls: 'er-count', text: String(due.length) });
 
     if (!due.length) {
-      root.createDiv('er-empty', { text: '今天没有到期的笔记，休息一下吧。' });
+      root.createDiv({ cls: 'er-empty', text: '今天没有到期的笔记，休息一下吧。' });
     } else {
       const list = root.createDiv('er-list');
       const limit = Math.max(20, Number(s.listLimit) || 200);
       due.slice(0, limit).forEach((item) => this.renderRow(list, item, now));
       if (due.length > limit) {
-        root.createDiv('er-more', {
+        root.createDiv({
+          cls: 'er-more',
           text: `还有 ${due.length - limit} 篇未显示，可在设置里调高“列表显示上限”。`,
         });
       }
@@ -1440,7 +1497,7 @@ class RoamView extends ItemView {
       const nextList = root.createDiv('er-list');
       upcoming.forEach((item) => this.renderRow(nextList, item, now));
     } else if (!due.length) {
-      root.createDiv('er-empty', { text: '范围内还没有可漫游的笔记，请先在设置中确认范围。' });
+      root.createDiv({ cls: 'er-empty', text: '范围内还没有可漫游的笔记，请先在设置中确认范围。' });
     }
 
     if (scrollTop) root.scrollTop = scrollTop;
@@ -1967,7 +2024,9 @@ class RoamSettingTab extends PluginSettingTab {
 
 /* ------------------------------------------------------------------ */
 
-// 供 node 测试读取纯调度逻辑，不影响 Obsidian 加载
+// 供 node 测试读取纯调度逻辑与视图类，不影响 Obsidian 加载
 EbbinghausRoamPlugin.__scheduler = S;
+EbbinghausRoamPlugin.RoamView = RoamView;
+EbbinghausRoamPlugin.VIEW_TYPE = VIEW_TYPE;
 
 module.exports = EbbinghausRoamPlugin;

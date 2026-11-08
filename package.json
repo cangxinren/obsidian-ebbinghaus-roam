@@ -1,13 +1,14 @@
 {
   "name": "obsidian-ebbinghaus-roam",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Ebbinghaus roaming review for Obsidian: schedule whole notes in selected folders along a forgetting curve.",
   "main": "main.js",
   "type": "commonjs",
   "private": true,
   "scripts": {
     "verify": "node verify.js",
-    "test": "node test-scheduler.js && node test-plugin.js",
+    "test": "node test-scheduler.js && node test-plugin.js && node test-view.js",
+    "test:view": "node test-view.js",
     "build": "node build.js"
   },
   "keywords": [

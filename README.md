@@ -70,8 +70,8 @@ Obsidian 插件：按艾宾浩斯遗忘曲线（或自定义间隔），对选�
 ## 开发
 
 ```bash
-node verify.js          # 语法 + manifest + 移动端 API 扫描 + 两套测试
-npm test                # 仅跑测试（调度 26 项、集成 30 项）
+node verify.js          # 语法 + manifest + 移动端 API 扫描 + 三套测试
+npm test                # 仅跑测试（调度 26 项、集成 34 项、视图渲染 9 项）
 npm run build           # 生成 dist/ebbinghaus-roam/<files> 与 zip
 ```
 
@@ -85,6 +85,8 @@ verify.js            静态检查 + 测试入口
 build.js             打包安装包
 test-scheduler.js    纯调度逻辑测试
 test-plugin.js       模拟 Obsidian 环境的集成测试
+test-view.js         实例化 RoamView 的渲染测试（面板列表、错误 UI）
+test-dom.js          兼容 Obsidian createDiv/createEl 语义的最小 DOM mock
 docs/                安卓安装与验证说明
 ```
 

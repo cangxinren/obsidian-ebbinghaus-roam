@@ -1,7 +1,7 @@
 {
   "id": "ebbinghaus-roam",
   "name": "Ebbinghaus Roam 漫游复习",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "minAppVersion": "1.5.0",
   "description": "按艾宾浩斯遗忘曲线或自定义间隔，对选定文件夹的整篇笔记做“打开即复习”的漫游调度。",
   "author": "GCMG",
