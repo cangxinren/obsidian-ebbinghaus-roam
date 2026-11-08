@@ -1015,13 +1015,19 @@ class EbbinghausRoamPlugin extends Plugin {
         // 手机端没有右侧栏，明确使用标签页而不是 split
         leaf = await Promise.resolve(workspace.getLeaf('tab'));
       } else {
-        const right = workspace.getRightLeaf(false);
-        leaf = right && typeof right.then === 'function' ? await right : right;
+        // 桌面端优先在右侧边栏新建一个叶子，避免覆盖已有的侧边栏面板
+        leaf = await Promise.resolve(workspace.getRightLeaf(true));
+        if (!leaf) leaf = await Promise.resolve(workspace.getRightLeaf(false));
+        // 极少数布局下没有右侧栏，退回主编辑区标签页
+        if (!leaf) leaf = await Promise.resolve(workspace.getLeaf('tab'));
       }
-      if (!leaf) return;
+      if (!leaf) {
+        new Notice('无法打开复习列表：当前窗口没有可用的侧边栏');
+        return;
+      }
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    workspace.revealLeaf(leaf);
+    if (typeof workspace.revealLeaf === 'function') workspace.revealLeaf(leaf);
   }
 
   refreshUI() {

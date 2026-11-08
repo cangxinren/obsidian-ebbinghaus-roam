@@ -701,6 +701,58 @@ async function asyncTest(name, fn) {
     }
   });
 
+  await asyncTest('桌面端在右侧边栏打开复习列表', async () => {
+    mockObsidian.Platform.isMobile = false;
+    const calls = {};
+    const rightLeaf = {
+      app,
+      setViewState: async (state) => {
+        calls.type = state.type;
+      },
+    };
+    const originalRight = workspace.getRightLeaf;
+    const originalGetLeaf = workspace.getLeaf;
+    workspace.getRightLeaf = (split) => {
+      calls.split = split;
+      return rightLeaf;
+    };
+    workspace.getLeaf = () => {
+      calls.usedMainLeaf = true;
+      return rightLeaf;
+    };
+    try {
+      await plugin.activateView();
+      assert.strictEqual(calls.type, 'ebbinghaus-roam-view');
+      assert.strictEqual(calls.split, true, '应优先在右侧边栏新建叶片');
+      assert.ok(!calls.usedMainLeaf, '不应占用主编辑区');
+    } finally {
+      workspace.getRightLeaf = originalRight;
+      workspace.getLeaf = originalGetLeaf;
+    }
+  });
+
+  await asyncTest('无右侧栏时退回主编辑区标签页', async () => {
+    const calls = {};
+    const originalRight = workspace.getRightLeaf;
+    const originalGetLeaf = workspace.getLeaf;
+    workspace.getRightLeaf = () => null;
+    workspace.getLeaf = (arg) => ({
+      app,
+      setViewState: async (state) => {
+        calls.type = state.type;
+        calls.arg = arg;
+      },
+    });
+    try {
+      await plugin.activateView();
+      assert.strictEqual(calls.type, 'ebbinghaus-roam-view');
+      assert.strictEqual(calls.arg, 'tab');
+    } finally {
+      workspace.getRightLeaf = originalRight;
+      workspace.getLeaf = originalGetLeaf;
+    }
+  });
+
   await asyncTest('应用 2027 国省考预设', () => {
     const n = plugin.applyExamPreset2027();
     const s = plugin.data.settings;
