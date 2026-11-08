@@ -672,6 +672,13 @@ async function asyncTest(name, fn) {
     }
   });
 
+  await asyncTest('upcomingList 返回范围内未到期的笔记', () => {
+    const up = plugin.upcomingList(5);
+    assert.ok(up.length > 0, '应有未到期笔记');
+    assert.ok(up.length <= 5);
+    assert.ok(up.every((x) => x.state.nextDue > Date.now()));
+  });
+
   await asyncTest('状态栏文本包含到期数', () => {
     plugin.refreshUI();
     assert.ok(plugin._statusBars[0].textContent.includes('漫游'));

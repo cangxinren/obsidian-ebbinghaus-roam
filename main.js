@@ -326,6 +326,21 @@ class EbbinghausRoamPlugin extends Plugin {
     }
 
     this.addCommand({ id: 'open-panel', name: '打开复习面板', callback: () => this.activateView() });
+    this.addCommand({
+      id: 'refresh-panel',
+      name: '刷新复习列表',
+      callback: () => {
+        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+        if (!leaves.length) {
+          this.activateView();
+          return;
+        }
+        for (const lf of leaves) {
+          const view = lf.view;
+          if (view && typeof view.renderSafe === 'function') view.renderSafe();
+        }
+      },
+    });
     this.addCommand({ id: 'start-roam', name: '开始漫游（打开下一篇到期笔记）', callback: () => this.startRoam(false) });
     this.addCommand({ id: 'random-roam', name: '随机漫游一篇到期笔记', callback: () => this.startRoam(true) });
     this.addCommand({ id: 'grade-remember', name: '标记当前笔记：记得（晋级）', callback: () => this.gradeActive('remember') });
@@ -370,6 +385,15 @@ class EbbinghausRoamPlugin extends Plugin {
       // 之后启动时发现的新笔记按普通规则从 1 天后开始。
       this.enrollScope(Object.keys(this.data.notes).length === 0);
       this.refreshUI();
+
+      // 布局恢复出来的空白视图：重新渲染一次，失败时会把错误显示在面板里
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const view = leaf.view;
+        if (!view) continue;
+        const content = view.contentEl;
+        const empty = !content || !content.childElementCount;
+        if (empty && typeof view.renderSafe === 'function') view.renderSafe();
+      }
     });
 
     this.registerInterval(window.setInterval(() => this.refreshUI(), 60 * 1000));
@@ -927,6 +951,18 @@ class EbbinghausRoamPlugin extends Plugin {
     return S.dueNotes(this.data.notes, Date.now(), (p) => paths.has(p) && S.inScope(p, s));
   }
 
+  /** 尚未到期的范围内笔记，按到期时间升序，用于侧边栏「即将到期」 */
+  upcomingList(limit = 10) {
+    const paths = new Set(this.app.vault.getMarkdownFiles().map((f) => f.path));
+    const s = this.data.settings;
+    const now = Date.now();
+    return Object.entries(this.data.notes)
+      .filter(([p, st]) => paths.has(p) && S.inScope(p, s) && Number(st.nextDue) > now)
+      .map(([path, state]) => ({ path, state }))
+      .sort((a, b) => a.state.nextDue - b.state.nextDue)
+      .slice(0, Math.max(0, limit));
+  }
+
   async startRoam(random) {
     const s = this.data.settings;
     let list = this.dueList();
@@ -1067,7 +1103,9 @@ class EbbinghausRoamPlugin extends Plugin {
 
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
       const view = leaf.view;
-      if (view && typeof view.render === 'function') view.render();
+      if (!view) continue;
+      if (typeof view.renderSafe === 'function') view.renderSafe();
+      else if (typeof view.render === 'function') view.render();
     }
   }
 
@@ -1292,20 +1330,49 @@ class RoamView extends ItemView {
   }
 
   async onOpen() {
-    this.render();
+    this.renderSafe();
   }
 
   async onClose() {
     this.contentEl.empty();
   }
 
+  /** 渲染失败时把错误显示在面板里，避免整块空白无从排查 */
+  renderSafe() {
+    try {
+      this.render();
+      this._lastError = null;
+    } catch (e) {
+      this._lastError = e;
+      console.error('[ebbinghaus-roam] 渲染复习面板失败', e);
+      this.renderError(e);
+    }
+  }
+
+  renderError(err) {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass('er-view');
+    root.createEl('h4', { text: '漫游复习面板加载失败' });
+    root.createEl('p', { text: String((err && err.message) || err) });
+    const stack = String((err && err.stack) || err).slice(0, 1500);
+    const pre = root.createEl('pre', { text: stack });
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.fontSize = 'var(--font-ui-smaller)';
+    const btn = root.createEl('button', { cls: 'er-btn', text: '重试' });
+    btn.addEventListener('click', () => this.renderSafe());
+  }
+
   render() {
+    const plugin = this.plugin;
+    // 布局恢复可能早于插件数据载入，此时跳过，onLayoutReady 会再渲染一次
+    if (!plugin || !plugin.data || !plugin.data.settings) return;
+
     const root = this.contentEl;
     const scrollTop = root.scrollTop;
     root.empty();
     root.addClass('er-view');
 
-    const plugin = this.plugin;
     const s = plugin.data.settings;
     const now = Date.now();
     const due = plugin.dueList();
@@ -1359,6 +1426,21 @@ class RoamView extends ItemView {
           text: `还有 ${due.length - limit} 篇未显示，可在设置里调高“列表显示上限”。`,
         });
       }
+    }
+
+    // 侧边栏常驻：再列一批即将到期的笔记，保证任何时刻都能看到列表
+    const upcoming = plugin.upcomingList(due.length ? 8 : 20);
+    if (upcoming.length) {
+      const nextHead = root.createDiv('er-section-head');
+      nextHead.createSpan({
+        cls: 'er-section-title',
+        text: due.length ? '接下来' : '即将到期',
+      });
+      nextHead.createSpan({ cls: 'er-count', text: String(upcoming.length) });
+      const nextList = root.createDiv('er-list');
+      upcoming.forEach((item) => this.renderRow(nextList, item, now));
+    } else if (!due.length) {
+      root.createDiv('er-empty', { text: '范围内还没有可漫游的笔记，请先在设置中确认范围。' });
     }
 
     if (scrollTop) root.scrollTop = scrollTop;
